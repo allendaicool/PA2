@@ -13,165 +13,209 @@ public class fileInput {
 	public static int packetID = 0 ;
 
 	public static void main(String[] args){
-		
-		
-		
+
+
+
 		String fileName = args[0];
 		System.out.println("filename is " + fileName);
 		node temp = new node();
 		nodeConfig(temp, fileName);
 		System.out.println("localport is " + temp.getPort());
 		System.out.println("timeout is " + temp.getTimeOUt());
-		
-		checkDV(temp);
 
-		
-		
-		/*
-		String neightbor2 = "128.59.196.2";
-		int port2 = 4116;
-		HashMap<IpPort,Integer> neighborDV2 = new HashMap<IpPort,Integer>();
-		IpPort temp5 = new IpPort("128.59.196.2" , 4118);
-		neighborDV2.put(temp5, 50);
-		IpPort temp6 = new IpPort("128.59.196.2" , 4116);
-		neighborDV2.put(temp6, 0);
-		IpPort temp7 = new IpPort("10.15.1.186" , 4115);
-		neighborDV2.put(temp7,Integer.MAX_VALUE);
-		updateNeightbor(temp,neightbor2,port2,neighborDV2);
-		checkDV(temp);
-		
-		
-		String neightbor3 = "128.59.196.2";
-		int port3  = 4118;
-		HashMap<IpPort,Integer> neighborDV3 = new HashMap<IpPort,Integer>();
-		IpPort temp8 = new IpPort("128.59.196.2" , 4118);
-		neighborDV3.put(temp8, 0);
-		IpPort temp9 = new IpPort("128.59.196.2" , 4116);
-		neighborDV3.put(temp9, 50);
-		IpPort temp10 = new IpPort("10.15.1.186" , 4115);
-		neighborDV3.put(temp10,Integer.MAX_VALUE);
-		
-		updateNeightbor(temp,neightbor3,port3,neighborDV3);
-		
-		String neightbor = "128.59.196.2";
-		int port  = 4116;
-		HashMap<IpPort,Integer> neighborDV = new HashMap<IpPort,Integer>();
-		IpPort temp2 = new IpPort("128.59.196.2" , 4116);
-		neighborDV.put(temp2, 0);
-		IpPort temp3 = new IpPort("128.59.196.2" , 4118);
-		neighborDV.put(temp3, Integer.MAX_VALUE);
-		IpPort temp4 = new IpPort("10.15.1.186" , 4115);
-		neighborDV.put(temp4,Integer.MAX_VALUE);
-		
-		updateNeightbor(temp,neightbor,port,neighborDV);
-		
-		String neightbor4 = "128.59.196.2";
-		int port4  = 4118;
-		HashMap<IpPort,Integer> neighborDV4 = new HashMap<IpPort,Integer>();
-		IpPort temp11 = new IpPort("128.59.196.2" , 4116);
-		neighborDV4.put(temp11, Integer.MAX_VALUE);
-		IpPort temp12 = new IpPort("128.59.196.2" , 4118);
-		neighborDV4.put(temp12, 0);
-		IpPort temp13 = new IpPort("10.15.1.186" , 4115);
-		neighborDV4.put(temp13,Integer.MAX_VALUE);
-		
-		updateNeightbor(temp,neightbor4,port4,neighborDV4);
-		checkNeighborDV(temp);
+		//checkDV(temp);
 
-		
-		
-		checkDV(temp);
-		
-		checkNeighborDV(temp);*/		
-		
-		
-        
-       
-        try {
+
+		ClientSocket client=null;
+
+		try {
 			DatagramSocket serverSocket = new DatagramSocket(temp.getPort());
 			ServerSocket server = new ServerSocket(serverSocket,temp);
 			DatagramSocket clientSocket = new DatagramSocket();
-			ClientSocket client = new ClientSocket(temp,clientSocket);
-			
+			client = new ClientSocket(temp,clientSocket);
+			checkTimeOut checkout = new checkTimeOut(temp.getTimeOUt(),temp);
+
+
 			server.start();
 			client.start();
-			
+			checkout.start();
+
 		} catch (SocketException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		} 
-           
-        boolean closeSignal = false;
-        while(!closeSignal){
-        	BufferedReader inFromUser =
-        			new BufferedReader(new InputStreamReader(System.in));
-        	String sentence =null;
-        	try {
-				 sentence = inFromUser.readLine().trim();
+
+		boolean closeSignal = false;
+		while(!closeSignal){
+			BufferedReader inFromUser =
+					new BufferedReader(new InputStreamReader(System.in));
+			String sentence =null;
+			try {
+				sentence = inFromUser.readLine().trim();
 			} catch (IOException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
-        	if(sentence.equals("showrt")){
-        		checkDV(temp);
-        		checkNeighborDV(temp);
-        	}
-        	if(sentence.equalsIgnoreCase("close")){
-        		closeSignal = true;
-        	}
-        }
-        System.out.println("system ends");
+			if(sentence.toLowerCase().equals("showrt")){
+				checkDV(temp);
+				checkNeighborDV(temp);
+			}
+			if(sentence.toLowerCase().startsWith("changecost")){
+				String check = new String(sentence);
+				String [] array = check.split("\\s+");
+				if(array.length != 4){
+					System.out.println("wrong format");
+					continue;
+				}
+				if(!temp.getneighborIPPort().contains(new IpPort(array[1],Integer.parseInt(array[2])))){
+					System.out.println("did not find such neighbor");
+					continue;
+				}
+				IpPort neightbor = temp.findNeighbor(array[1] , Integer.parseInt(array[2]));
+				if(neightbor==null){
+					System.out.println("bug  here   it is null");
+				}
+				if(temp.linkDownList.contains(neightbor)){
+					System.out.println("linkdown ignored");
+					continue;
+				}
+				double costChange =  Double.parseDouble(array[3]);
+				if(costChange < 0){
+					System.out.println("cost can not be negative");
+					continue;
+				}
+				client.linkChange = neightbor;
+				System.out.println("cost change is " + costChange);
+				
+				client.linkChangeCost = costChange;
+				temp.linkChange(neightbor, costChange);
+			}
+			if(sentence.toLowerCase().startsWith("linkdown")){
 
+				String check = new String(sentence);
+				String [] array = check.split("\\s+");
+				if(array.length != 3){
+					System.out.println("wrong format");
+					continue;
+				}
+				if(!temp.getneighborIPPort().contains(new IpPort(array[1],Integer.parseInt(array[2])))){
+					System.out.println("did not find such neighbor");
+					continue;
+				}
+				IpPort neightbor = temp.findNeighbor(array[1] , Integer.parseInt(array[2]));
+				if(neightbor == null){
+					System.out.println("bug  here   it is null");
+				}
+				client.linkDown = neightbor;
+				
+				temp.linkdown(neightbor,Double.MAX_VALUE);
+
+			}
+			
+			if(sentence.toLowerCase().startsWith("linkup")){
+
+				String check = new String(sentence);
+				String [] array = check.split("\\s+");
+				if(array.length != 3){
+					System.out.println("wrong format");
+					continue;
+				}
+				if(!temp.getneighborIPPort().contains(new IpPort(array[1],Integer.parseInt(array[2])))){
+					System.out.println("did not find such neighbor");
+					continue;
+				}
+				IpPort neightbor = temp.findNeighbor(array[1] , Integer.parseInt(array[2]));
+				if(neightbor == null){
+					System.out.println("bug  here   it is null");
+				}
+				client.linkUp = neightbor;
+				temp.linkUp(neightbor);
+				
+			}
+			if(sentence.toLowerCase().startsWith("transfer")){
+				String check = new String(sentence);
+				String [] array = check.split("\\s+");
+				if(array.length != 4){
+					System.out.println("wrong format");
+					continue;
+				}
+				
+				IpPort neightbor = new IpPort(array[2] , Integer.parseInt(array[3]));
+				client.transfer = true;
+				client.fileName = array[1];
+				client.transferIP = neightbor;
+				
+			}
+			if(sentence.equalsIgnoreCase("close")){
+				closeSignal = true;
+			}
+		}
+		System.out.println("system ends");
+		System.exit(0);
 	}
-	
-	
+
+
 	public static void checkDestLink(node temp){
-		 for(IpPort ttii : temp.destLink.keySet()){
-	        	System.out.print(" the destination ip is " + ttii.ip);
-	        	System.out.print(" the destination port is " + ttii.port);
-	        	System.out.print(" the link ip is " + temp.destLink.get(ttii).ip);
-	        	System.out.println(" the link port is " + temp.destLink.get(ttii).port);
+		for(IpPort ttii : temp.destLink.keySet()){
+			System.out.print(" the destination ip is " + ttii.ip);
+			System.out.print(" the destination port is " + ttii.port);
+			System.out.print(" the link ip is " + temp.destLink.get(ttii).ip);
+			System.out.println(" the link port is " + temp.destLink.get(ttii).port);
 
 
-	        }
-	        
+		}
+
 	}
-	
+
 	public static void checkNeighborDV(node temp){
-		Iterator<Entry<IpPort, HashMap<IpPort, Integer>>> it2 = temp.getNeighborDV().entrySet().iterator();
-        while(it2.hasNext()){
-        	Entry<IpPort, HashMap<IpPort, Integer>> ttooo = it2.next();
-            System.out.println("neighbor ip is " +  ttooo.getKey().ip);
-            System.out.println("neighbor port is " +  ttooo.getKey().port);
-            Iterator<Entry<IpPort, Integer>> jooooo = ttooo.getValue().entrySet().iterator();
-            
-            while(jooooo.hasNext()){
-         	   Entry<IpPort, Integer> ppp = jooooo.next();
-         	  System.out.print ( "ip is " + ppp.getKey().ip);
-         	  System.out.print ( "  port is " + ppp.getKey().port);
-         	  System.out.print( "  cost is " + ppp.getValue() + "\n");
-               
-            }
-          }
+		Iterator<Entry<IpPort, HashMap<IpPort, Double>>> it2 = temp.getNeighborDV().entrySet().iterator();
+		while(it2.hasNext()){
+			Entry<IpPort, HashMap<IpPort, Double>> ttooo = it2.next();
+			System.out.println("neighbor ip is " +  ttooo.getKey().ip);
+			System.out.println("neighbor port is " +  ttooo.getKey().port);
+			Iterator<Entry<IpPort, Double>> jooooo = ttooo.getValue().entrySet().iterator();
+
+			while(jooooo.hasNext()){
+				Entry<IpPort, Double> ppp = jooooo.next();
+				System.out.print ( "ip is " + ppp.getKey().ip);
+				System.out.print ( "  port is " + ppp.getKey().port);
+				System.out.print( "  cost is " + ppp.getValue() + "\n");
+
+			}
+		}
 	}
-	
+
 	public static void checkDV(node temp){
-		Iterator<Entry<IpPort, Integer>> it1 = temp.getDV().entrySet().iterator();
-	       while(it1.hasNext()){
-	    	   Entry<IpPort, Integer> ppp = it1.next();
-	    	  System.out.print ( "ip is " + ppp.getKey().ip);
-	    	  System.out.print ( "  port is " + ppp.getKey().port);
-	    	  System.out.print( "  cost is " + ppp.getValue() + "\n");
-	          
-	       }
+		Iterator<Entry<IpPort, Double>> it1 = temp.getDV().entrySet().iterator();
+				System.out.println(System.currentTimeMillis() + "  Distance vector list is:");
+				while(it1.hasNext()){
+					Entry<IpPort, Double> ppp = it1.next();
+					if(!ppp.getKey().equals(temp.itself)){
+						System.out.print ( "destination is " + ppp.getKey().ip +" :" + ppp.getKey().port);
+						
+						
+						System.out.print( "  cost = " + ppp.getValue() + " ,Link = ( ");
+						if (temp.destLink.get(ppp.getKey()) == null){
+							System.out.println("none"+ " :" + 
+								"none" +")"
+								);
+						} else{
+						
+							System.out.println(temp.destLink.get(ppp.getKey()).ip+ " :" + 
+								temp.destLink.get(ppp.getKey()).port +")"
+									);
+					       }
+				 	 }
+				}
+		 	
 	}
-	
-	
-	public static void updateNeightbor(node temp, String neightbor, int port, HashMap<IpPort,Integer> neighborDv){
+
+
+	public static void updateNeightbor(node temp, String neightbor, int port, HashMap<IpPort,Double> neighborDv){
 		temp.updateNeighborDV(neightbor, port, neighborDv);
-		
+
 	}
-	
+
 	public static void nodeConfig(node host, String filename){
 		BufferedReader br = null; 		 
 		try {
@@ -191,14 +235,14 @@ public class fileInput {
 				}
 				else{
 					String[] weightIp = sCurrentLine.split("\\s+");
-					int cost = Integer.parseInt(weightIp[1]);
+					double cost = Double.parseDouble(weightIp[1]);
 					String[] IpPort = weightIp[0].split(":");
 					String neighborIp = IpPort[0];
 					int neighborPort = Integer.parseInt(IpPort[1]);
 					host.setListenOnPort( localPort);
 					host.setTimeOutValue( timeOUt);
 					host.initialize(neighborIp,neighborPort,cost);
-                    
+
 				}
 			}
 

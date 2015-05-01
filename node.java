@@ -10,24 +10,34 @@ import java.util.Map.Entry;
 
 
 public class node {
-    
+
 	public static int route_update = 1;
-	public static int link_change = 2;
-	public static int transfer_file = 3;
-	
+	public static int link_down = 2;
+	public static int transfer_file = 5;
+	public static int link_change = 4;
+	public static int link_up = 3;
+	public HashSet<IpPort> linkDownList = new HashSet<IpPort>();
+
+	private HashMap<IpPort,Double> neighborConfigureCost = new HashMap<IpPort,Double>();
 	//private HashMap<String,Integer> neighborIPPort  = new HashMap<String,Integer>();
 	private List<IpPort> neighborIPPort = new ArrayList<IpPort>();
-	private HashMap<IpPort,Integer> neighborCost = new HashMap<IpPort, Integer>();
-	private HashMap<IpPort,Integer> DV = new HashMap<IpPort, Integer>();
-	private HashMap<IpPort, HashMap<IpPort,Integer>> neigborDV = new HashMap<IpPort, HashMap<IpPort, Integer>>();
+	private HashMap<IpPort,Double> neighborCost = new HashMap<IpPort, Double>();
+	private HashMap<IpPort,Double> DV = new HashMap<IpPort, Double>();
+	private HashMap<IpPort, HashMap<IpPort,Double>> neigborDV = new HashMap<IpPort, HashMap<IpPort, Double>>();
+
+
+	public HashMap<IpPort, Long> neighborDVUpdateTime = new HashMap<IpPort,Long>();
+
 	// <destination, link>?
 	public HashMap<IpPort,IpPort> destLink = new HashMap<IpPort,IpPort>();
-	
+
+	//public IpPort linkDownNode;
 	private int listenOnPort;
 	private int timeOutValue;
 	private String ipAddress;
 	public IpPort itself;
 	public boolean changeSignal = false;
+	public boolean linkdown = false;
 	public node( ){
 		try {
 			this.ipAddress = (InetAddress.getLocalHost().getHostAddress());
@@ -38,20 +48,19 @@ public class node {
 
 	}
 
-
 	public List<IpPort> getneighborIPPort (){
 		return this.neighborIPPort;
 	}
 
-	public HashMap<IpPort,Integer> getNeighborCost (){
+	public HashMap<IpPort,Double> getNeighborCost (){
 		return this.neighborCost;
 	}
 
-	public HashMap<IpPort,Integer> getDV (){
+	public HashMap<IpPort,Double> getDV (){
 		return this.DV;
 	}
 
-	public HashMap<IpPort, HashMap<IpPort,Integer>> getNeighborDV(){
+	public HashMap<IpPort, HashMap<IpPort,Double>> getNeighborDV(){
 		return this.neigborDV;
 	}
 
@@ -67,8 +76,8 @@ public class node {
 		this.listenOnPort = listenOnPort;		
 		itself = new IpPort(this.ipAddress,this.listenOnPort);
 		// add itself to the distance vector the cost is 0
-		this.DV.put(itself,0);
-		this.neighborCost.put(itself, 0);
+		this.DV.put(itself,(double) 0);
+		this.neighborCost.put(itself, (double) 0);
 
 	}
 
@@ -76,35 +85,124 @@ public class node {
 		this.timeOutValue = timeOutValue;
 	}
 
-	public void initialize(String neighbor, int port, int cost){
+	public void initialize(String neighbor, int port, double cost){
 		IpPort temp = new IpPort(neighbor, port);
 		this.neighborIPPort.add(temp);
 		this.neighborCost.put(temp, cost);
-
-
+		this.neighborConfigureCost.put(temp, cost);
 		this.DV.put(temp, cost);
 		this.destLink.put(temp, temp);
-		this.neigborDV.put(temp, new HashMap<IpPort, Integer>());
-		this.neigborDV.get(temp).put(temp,0);
+		this.neigborDV.put(temp, new HashMap<IpPort, Double>());
+		this.neigborDV.get(temp).put(temp,(double) 0);
+
 	}
 
 
-	public boolean updateNeighborDV(String neighbor,int port, HashMap<IpPort,Integer> neighborDv){
-		IpPort temp = new IpPort(neighbor, port);
-		int index = this.neighborIPPort.indexOf(temp);
-		if(index != -1){
-			temp = this.neighborIPPort.get(index);
+
+	public IpPort findNeighbor(String ip, int port){
+		List<IpPort> setting =this.getneighborIPPort();
+		for(IpPort temp:setting){
+			if (temp.ip.equals(ip) && temp.port == port){
+				return temp;
+			}
 		}
-		else{
+		return null;
+	}
+
+	public boolean updateNeighborDV(String neighbor,int port, HashMap<IpPort,Double> neighborDv){
+		IpPort temp = this.findNeighbor(neighbor,port);
+		if(temp == null){
 			return false;
 		}
+
+
+		this.neighborDVUpdateTime.put(temp, System.currentTimeMillis());
+
 		this.neigborDV.put(temp, neighborDv);
+		if(this.linkDownList.contains(temp)){
+			this.linkDownList.remove(temp);
+			this.getNeighborCost().put(temp, this.neighborConfigureCost.get(temp));
+		}
 		updateOwnDV(neighborDv,neighbor, port);
-		
+
 		return true;
 	}
 
-	private boolean updateOwnDV(HashMap<IpPort,Integer> neighborDV, String ip, int port){
+	
+	public boolean linkChange(IpPort neighbor, double cost){
+		updateLinkCost(neighbor,cost);
+		return true;
+	}
+	
+	public boolean linkUp(IpPort neighbor){
+		
+		linkDownList.remove(neighbor);
+		updateLinkCost(neighbor,this.neighborConfigureCost.get(neighbor));
+		return true;
+
+	}
+	public boolean linkdown(IpPort neighbor,double cost){		
+		linkDownList.add(neighbor);
+		updateLinkCost(neighbor,cost);
+		return true;
+	}
+
+	public boolean updateLinkCost(IpPort neighbor, double cost){
+		this.getNeighborCost().put(neighbor, cost);
+		List<IpPort> allNode = new ArrayList<IpPort>();
+		allNode.addAll(this.DV.keySet());
+		allNode.remove(this.itself);
+		updateOwnDVAlgo(allNode);
+		return true;
+	}
+
+	private void updateOwnDVAlgo(List<IpPort> allNode){
+		
+		for(IpPort iter : allNode){
+
+			double min  = Double.MAX_VALUE;
+			for ( IpPort neighbor:this.neighborIPPort){
+				if (!this.neigborDV.get(neighbor).containsKey(iter)){
+					continue;
+				}
+				else{
+					double neighborDistance = this.neighborCost.get(neighbor);
+					if(neighborDistance == Double.MAX_VALUE){
+						continue;
+					}
+					double dvDistance = this.neigborDV.get(neighbor).get(iter);
+					if(dvDistance == Double.MAX_VALUE){
+						continue;
+					}
+
+					if(   ((Double.MAX_VALUE -neighborDistance) >dvDistance) &&(neighborDistance+dvDistance) < min){
+
+						min = neighborDistance+dvDistance;
+						this.destLink.put(iter, neighbor);	
+						if(this.itself.port == 4115 && iter.port == 4118){
+								if(min == 30){
+								System.out.println("link path is " + this.destLink.get(iter).port);
+							}
+						}
+					}
+				}  
+			}
+			
+			
+
+			if( !this.DV.containsKey(iter) || min != this.DV.get(iter)){
+				this.changeSignal = true;
+			}
+			if(min == Double.MAX_VALUE){
+				this.destLink.put(iter, null);
+			}
+			
+			this.DV.put(iter, min);
+		}
+
+	}
+
+	private boolean updateOwnDV(HashMap<IpPort,Double> neighborDV, String ip, int port){
 		IpPort temp = new IpPort(ip, port);
 		int index = this.neighborIPPort.indexOf(temp);
 		if(index != -1){
@@ -114,50 +212,19 @@ public class node {
 			return false;
 		}
 		List<IpPort> allNode = new ArrayList<IpPort>();
-		allNode.addAll(this.neighborIPPort);
-		
-		Iterator<Entry<IpPort, Integer>> it = neighborDV.entrySet().iterator();
+		allNode.addAll(this.DV.keySet());
+
+		Iterator<Entry<IpPort, Double>> it = neighborDV.entrySet().iterator();
 		while(it.hasNext()){
-			Map.Entry<IpPort, Integer> pair = it.next();
+			Map.Entry<IpPort, Double> pair = it.next();
+
 			if(!allNode.contains(pair.getKey()))
 				allNode.add(pair.getKey());
 		}
+
 		allNode.remove(this.itself);
-		for(IpPort iter : allNode){
-			
-			int min  = Integer.MAX_VALUE;
-			for ( IpPort neighbor:this.neighborIPPort){
-				if (!this.neigborDV.get(neighbor).containsKey(iter)){
-					continue;
-				}
-				else{
-					int neighborDistance = this.neighborCost.get(neighbor);
-					if(neighborDistance == Integer.MAX_VALUE){
-						continue;
-					}
-					int dvDistance = this.neigborDV.get(neighbor).get(iter);
-					if(dvDistance == Integer.MAX_VALUE){
-						continue;
-					}
-					
-					if((neighborDistance+dvDistance) < min){
-						
-						min = neighborDistance+dvDistance;
-						this.destLink.put(iter, neighbor);	
-					}
-				}  
-			}
-			
-			if( !this.DV.containsKey(iter) || min < this.DV.get(iter)){
-				this.changeSignal = true;
-			}
-			if(min == Integer.MAX_VALUE){
-				System.out.println("bug here !!!!!!!!!!!!!!!!!");
-				System.out.println("dv iport is " + iter.port);
-				System.out.println("itself is " + this.itself.port);
-			}
-			this.DV.put(iter, min);
-		}
+
+		updateOwnDVAlgo(allNode);
 		return true;
 	}
 }

@@ -9,7 +9,8 @@ CLASSES = \
 	fileInput.java\
         IpPort.java\
         node.java\
-	ServerSocket.java
+	ServerSocket.java\
+	checkTimeOut.java
 	
 
 default: classes
